@@ -1,6 +1,6 @@
 # Yash's Personal Fitness Tracker
 
-A dark, athletic personal dashboard for fat-loss tracking with workout logging, diet tracking, weekly planning, progress charts, rewards, and Google Sheets sync.
+A dark, athletic personal dashboard for fat-loss tracking with workout logging, diet tracking, weekly planning, progress charts, rewards, and Firebase Firestore sync.
 
 ## Stack
 
@@ -9,7 +9,7 @@ A dark, athletic personal dashboard for fat-loss tracking with workout logging, 
 - shadcn/ui primitives
 - Recharts
 - date-fns
-- Google Sheets API v4 through Next.js route handlers
+- Firebase Firestore through Next.js route handlers
 - Framer Motion
 - Lucide React
 - canvas-confetti
@@ -30,38 +30,45 @@ npm run dev
 
 3. Open [http://localhost:3000/dashboard](http://localhost:3000/dashboard)
 
-If Google credentials are not configured, the app automatically uses an in-memory fallback store so you can test logging, charts, badges, and navigation locally.
+If Firebase credentials are not configured, the app automatically uses an in-memory fallback store so you can test logging, charts, badges, and navigation locally.
 
 ## Environment Variables
 
 Create `.env.local` with:
 
 ```env
-GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@project.iam.gserviceaccount.com
-GOOGLE_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n"
-GOOGLE_SHEET_ID=1dwDLu5CBNi_MHu4XBG6oFF_ZWnrfjPVTXiuhP6M1Gvk
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+NEXT_PUBLIC_FIREBASE_APP_ID=...
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=...
 NEXT_PUBLIC_APP_NAME=Fitness Tracker
 ```
 
-## Google Cloud Setup
+## Firebase Setup
 
-1. Go to Google Cloud Console and create a new project.
-2. Enable the Google Sheets API for that project.
-3. Open `IAM & Admin` → `Service Accounts`.
-4. Create a service account.
-5. Create and download a JSON key for that service account.
-6. Copy the `client_email` value into `GOOGLE_SERVICE_ACCOUNT_EMAIL`.
-7. Copy the `private_key` value into `GOOGLE_PRIVATE_KEY`.
-8. Open the Google Sheet with ID `1dwDLu5CBNi_MHu4XBG6oFF_ZWnrfjPVTXiuhP6M1Gvk`.
-9. Share the sheet with the service account email and give it `Editor` access.
-10. Add the three environment variables to Vercel or `.env.local`.
+1. Go to Firebase Console and create a project.
+2. Enable `Firestore Database`.
+3. Register a web app and copy the Firebase web config values.
+4. Open `Project settings` → `Service accounts`.
+5. Generate and download a private key JSON.
+6. Copy `project_id` into `FIREBASE_PROJECT_ID`.
+7. Copy `client_email` into `FIREBASE_CLIENT_EMAIL`.
+8. Copy `private_key` into `FIREBASE_PRIVATE_KEY`.
+9. Add the web config values as `NEXT_PUBLIC_FIREBASE_*` environment variables.
+10. Add the same environment variables in Vercel before deploying.
 
-The app will create and use these tabs when credentials exist:
+The app uses these Firestore collections when credentials exist:
 
-- `DailyLog`
-- `WeeklyWeight`
-- `Badges`
-- `Settings`
+- `dayLogs`
+- `weights`
+- `badges`
+- `meta/settings`
 
 ## API Routes
 
@@ -113,13 +120,20 @@ vercel deploy --prod
 
 Add these same environment variables in the Vercel project settings before production deploys:
 
-- `GOOGLE_SERVICE_ACCOUNT_EMAIL`
-- `GOOGLE_PRIVATE_KEY`
-- `GOOGLE_SHEET_ID`
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_CLIENT_EMAIL`
+- `FIREBASE_PRIVATE_KEY`
+- `NEXT_PUBLIC_FIREBASE_API_KEY`
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+- `NEXT_PUBLIC_FIREBASE_APP_ID`
+- `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID`
 - `NEXT_PUBLIC_APP_NAME`
 
 ## Notes
 
 - The app is dark-mode only by design.
-- Google Sheets secrets are only used in server-side route handlers.
+- Firebase admin secrets are only used in server-side route handlers.
 - Local fallback storage is intentionally credential-free for quick testing.

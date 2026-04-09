@@ -1,8 +1,11 @@
 import "server-only";
 
-import { google } from "googleapis";
+import { cert, getApps, initializeApp, type App, type ServiceAccount } from "firebase-admin/app";
+import {
+  getFirestore,
+  type Firestore,
+} from "firebase-admin/firestore";
 import { DEFAULT_SETTINGS, seedWeights } from "@/lib/fitness";
-import { dayLogToRow, rowToDayLog, rowToWeight, rowsToSettings, settingsToRows, weightToRow } from "@/lib/sheets/mappers";
 import type { AppSettings, DayLog, WeightEntry } from "@/types";
 
 type MemoryStore = {
@@ -12,41 +15,19 @@ type MemoryStore = {
   settings: AppSettings | null;
 };
 
+const COLLECTIONS = {
+  dayLogs: "dayLogs",
+  weights: "weights",
+  badges: "badges",
+  meta: "meta",
+} as const;
+
 declare global {
   // eslint-disable-next-line no-var
   var __fitnessTrackerStore: MemoryStore | undefined;
+  // eslint-disable-next-line no-var
+  var __fitnessTrackerFirebaseApp: App | undefined;
 }
-
-const SHEETS = {
-  dailyLog: {
-    title: "DailyLog",
-    headers: [
-      "Date",
-      "WorkoutDay",
-      "WorkoutDone",
-      "ExercisesCompleted(JSON)",
-      "CaloriesLogged",
-      "ProteinLogged",
-      "WaterGlasses",
-      "MealsEaten(JSON)",
-      "SnacksAvoided(JSON)",
-      "Notes",
-      "WeightKg",
-    ],
-  },
-  weeklyWeight: {
-    title: "WeeklyWeight",
-    headers: ["WeekStartDate", "WeightKg", "WeekNumber"],
-  },
-  badges: {
-    title: "Badges",
-    headers: ["BadgeId", "UnlockedDate", "UnlockedAt"],
-  },
-  settings: {
-    title: "Settings",
-    headers: ["Key", "Value"],
-  },
-} as const;
 
 function getMemoryStore(): MemoryStore {
   if (!global.__fitnessTrackerStore) {
@@ -58,307 +39,203 @@ function getMemoryStore(): MemoryStore {
       settings: null,
     };
   }
+
   return global.__fitnessTrackerStore;
 }
 
-function hasGoogleCredentials() {
+function hasFirebaseCredentials() {
   return Boolean(
-    process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
-      process.env.GOOGLE_PRIVATE_KEY &&
-      process.env.GOOGLE_SHEET_ID,
+    process.env.FIREBASE_PROJECT_ID &&
+      process.env.FIREBASE_CLIENT_EMAIL &&
+      process.env.FIREBASE_PRIVATE_KEY,
   );
 }
 
-async function getSheetsClient() {
-  const auth = new google.auth.JWT({
-    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+function getFirebaseApp() {
+  if (global.__fitnessTrackerFirebaseApp) {
+    return global.__fitnessTrackerFirebaseApp;
+  }
+
+  const existing = getApps()[0];
+  if (existing) {
+    global.__fitnessTrackerFirebaseApp = existing;
+    return existing;
+  }
+
+  const serviceAccount: ServiceAccount = {
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+  };
+
+  const app = initializeApp({
+    credential: cert(serviceAccount),
+    projectId: process.env.FIREBASE_PROJECT_ID,
   });
 
-  return google.sheets({ version: "v4", auth });
+  global.__fitnessTrackerFirebaseApp = app;
+  return app;
 }
 
-async function ensureSheetStructure() {
-  if (!hasGoogleCredentials()) return;
-
-  const sheets = await getSheetsClient();
-  const spreadsheetId = process.env.GOOGLE_SHEET_ID!;
-  const existing = await sheets.spreadsheets.get({ spreadsheetId });
-  const titles = new Set(existing.data.sheets?.map((sheet) => sheet.properties?.title));
-  const requests = Object.values(SHEETS)
-    .filter((sheet) => !titles.has(sheet.title))
-    .map((sheet) => ({
-      addSheet: {
-        properties: {
-          title: sheet.title,
-        },
-      },
-    }));
-
-  if (requests.length) {
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      requestBody: { requests },
-    });
-  }
-
-  await Promise.all(
-    Object.values(SHEETS).map(async (sheet) => {
-      const current = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: `${sheet.title}!A1:Z2`,
-      });
-
-      if (!current.data.values?.length) {
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${sheet.title}!A1`,
-          valueInputOption: "RAW",
-          requestBody: { values: [Array.from(sheet.headers)] },
-        });
-      }
-    }),
-  );
+function getDb(): Firestore {
+  return getFirestore(getFirebaseApp());
 }
 
-async function readSheetValues(sheetTitle: string) {
-  const sheets = await getSheetsClient();
-  const spreadsheetId = process.env.GOOGLE_SHEET_ID!;
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `${sheetTitle}!A2:Z`,
-  });
-  return response.data.values ?? [];
+function normalizeDayLog(data: unknown): DayLog | null {
+  if (!data || typeof data !== "object") return null;
+  return data as DayLog;
 }
 
-function findLastRowIndex(rows: string[][], key: string) {
-  for (let index = rows.length - 1; index >= 0; index -= 1) {
-    if (rows[index]?.[0] === key) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function dedupeRowsByKey(rows: string[][]) {
-  const latestByKey = new Map<string, string[]>();
-
-  for (const row of rows) {
-    if (!row[0]) continue;
-    latestByKey.set(row[0], row);
-  }
-
-  return [...latestByKey.values()];
-}
-
-function getDayLogTimestamp(row: string[]) {
-  try {
-    const notesBlob = row[9] ? JSON.parse(row[9]) : {};
-    const updatedAt = notesBlob.updatedAt;
-    return updatedAt ? Date.parse(updatedAt) || 0 : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function dedupeDayLogRows(rows: string[][]) {
-  const latestByDate = new Map<string, string[]>();
-
-  for (const row of rows) {
-    const key = row[0];
-    if (!key) continue;
-
-    const existing = latestByDate.get(key);
-    if (!existing || getDayLogTimestamp(row) >= getDayLogTimestamp(existing)) {
-      latestByDate.set(key, row);
-    }
-  }
-
-  return [...latestByDate.values()];
-}
-
-async function upsertSheetRow(
-  sheetTitle: string,
-  key: string,
-  values: string[],
-) {
-  const sheets = await getSheetsClient();
-  const spreadsheetId = process.env.GOOGLE_SHEET_ID!;
-  const rows = await readSheetValues(sheetTitle);
-  const rowIndex = findLastRowIndex(rows, key);
-
-  if (rowIndex >= 0) {
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: `${sheetTitle}!A${rowIndex + 2}`,
-      valueInputOption: "RAW",
-      requestBody: { values: [values] },
-    });
-    return;
-  }
-
-  await sheets.spreadsheets.values.append({
-    spreadsheetId,
-    range: `${sheetTitle}!A1`,
-    valueInputOption: "RAW",
-    requestBody: { values: [values] },
-  });
-}
-
-async function writeSheetRow(
-  sheetTitle: string,
-  rowIndex: number,
-  values: string[],
-) {
-  const sheets = await getSheetsClient();
-  const spreadsheetId = process.env.GOOGLE_SHEET_ID!;
-
-  if (rowIndex >= 0) {
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: `${sheetTitle}!A${rowIndex + 2}`,
-      valueInputOption: "RAW",
-      requestBody: { values: [values] },
-    });
-    return;
-  }
-
-  await sheets.spreadsheets.values.append({
-    spreadsheetId,
-    range: `${sheetTitle}!A1`,
-    valueInputOption: "RAW",
-    requestBody: { values: [values] },
-  });
+function normalizeWeight(data: unknown): WeightEntry | null {
+  if (!data || typeof data !== "object") return null;
+  return data as WeightEntry;
 }
 
 export async function getSettings() {
-  if (!hasGoogleCredentials()) {
+  if (!hasFirebaseCredentials()) {
     return getMemoryStore().settings;
   }
 
-  await ensureSheetStructure();
-  const rows = await readSheetValues(SHEETS.settings.title);
-  return rowsToSettings(rows);
+  const db = getDb();
+  const snapshot = await db.collection(COLLECTIONS.meta).doc("settings").get();
+  if (!snapshot.exists) return null;
+  const data = snapshot.data();
+  return data?.startDate ? ({ startDate: data.startDate } as AppSettings) : null;
 }
 
 export async function saveSettings(settings: AppSettings) {
-  if (!hasGoogleCredentials()) {
+  if (!hasFirebaseCredentials()) {
     getMemoryStore().settings = settings;
     return settings;
   }
 
-  await ensureSheetStructure();
-  const rows = settingsToRows(settings);
-  await Promise.all(
-    rows.map(([key, value]) => upsertSheetRow(SHEETS.settings.title, key, [key, value])),
-  );
+  const db = getDb();
+  await db.collection(COLLECTIONS.meta).doc("settings").set(settings, { merge: true });
   return settings;
 }
 
 export async function getDayLog(date: string) {
-  if (!hasGoogleCredentials()) {
+  if (!hasFirebaseCredentials()) {
     return getMemoryStore().dayLogs.get(date) ?? null;
   }
 
-  await ensureSheetStructure();
-  const rows = await readSheetValues(SHEETS.dailyLog.title);
-  const rowIndex = findLastRowIndex(rows, date);
-  const row = rowIndex >= 0 ? rows[rowIndex] : null;
-  return row ? rowToDayLog(row) : null;
+  const db = getDb();
+  const snapshot = await db.collection(COLLECTIONS.dayLogs).doc(date).get();
+  return snapshot.exists ? normalizeDayLog(snapshot.data()) : null;
 }
 
 export async function upsertDayLog(dayLog: DayLog) {
-  if (!hasGoogleCredentials()) {
+  if (!hasFirebaseCredentials()) {
     getMemoryStore().dayLogs.set(dayLog.date, dayLog);
     return dayLog;
   }
 
-  await ensureSheetStructure();
-  const rows = await readSheetValues(SHEETS.dailyLog.title);
-  const rowIndex = findLastRowIndex(rows, dayLog.date);
-  const existing = rowIndex >= 0 ? rowToDayLog(rows[rowIndex]) : null;
-  const incomingTs = Date.parse(dayLog.updatedAt ?? "") || 0;
-  const existingTs = Date.parse(existing?.updatedAt ?? "") || 0;
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.dayLogs).doc(dayLog.date);
 
-  if (existing && incomingTs < existingTs) {
-    return existing;
-  }
+  const saved = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const existing = snapshot.exists ? normalizeDayLog(snapshot.data()) : null;
+    const incomingTs = Date.parse(dayLog.updatedAt ?? "") || 0;
+    const existingTs = Date.parse(existing?.updatedAt ?? "") || 0;
 
-  await writeSheetRow(SHEETS.dailyLog.title, rowIndex, dayLogToRow(dayLog));
-  return dayLog;
+    if (existing && incomingTs < existingTs) {
+      return existing;
+    }
+
+    transaction.set(ref, dayLog, { merge: false });
+    return dayLog;
+  });
+
+  return saved;
 }
 
 export async function getWeekLogs(startDate: string) {
-  if (!hasGoogleCredentials()) {
+  if (!hasFirebaseCredentials()) {
     const store = getMemoryStore();
-    return [...store.dayLogs.values()].filter((log) => log.date >= startDate);
+    return [...store.dayLogs.values()]
+      .filter((log) => log.date >= startDate)
+      .sort((a, b) => (a.date > b.date ? 1 : -1))
+      .slice(0, 7);
   }
 
-  await ensureSheetStructure();
-  const rows = dedupeDayLogRows(await readSheetValues(SHEETS.dailyLog.title));
-  return rows
-    .map(rowToDayLog)
-    .filter((log) => log.date >= startDate)
-    .sort((a, b) => (a.date > b.date ? 1 : -1))
-    .slice(0, 7);
+  const db = getDb();
+  const snapshot = await db
+    .collection(COLLECTIONS.dayLogs)
+    .where("date", ">=", startDate)
+    .orderBy("date")
+    .limit(7)
+    .get();
+
+  return snapshot.docs
+    .map((doc) => normalizeDayLog(doc.data()))
+    .filter((log): log is DayLog => Boolean(log));
 }
 
 export async function getAllLogs() {
-  if (!hasGoogleCredentials()) {
+  if (!hasFirebaseCredentials()) {
     return [...getMemoryStore().dayLogs.values()].sort((a, b) => (a.date > b.date ? 1 : -1));
   }
 
-  await ensureSheetStructure();
-  const rows = dedupeDayLogRows(await readSheetValues(SHEETS.dailyLog.title));
-  return rows.map(rowToDayLog).sort((a, b) => (a.date > b.date ? 1 : -1));
+  const db = getDb();
+  const snapshot = await db.collection(COLLECTIONS.dayLogs).orderBy("date").get();
+  return snapshot.docs
+    .map((doc) => normalizeDayLog(doc.data()))
+    .filter((log): log is DayLog => Boolean(log));
 }
 
 export async function upsertWeight(weight: WeightEntry) {
-  if (!hasGoogleCredentials()) {
+  if (!hasFirebaseCredentials()) {
     getMemoryStore().weights.set(weight.weekStartDate, weight);
     return weight;
   }
 
-  await ensureSheetStructure();
-  await upsertSheetRow(SHEETS.weeklyWeight.title, weight.weekStartDate, weightToRow(weight));
+  const db = getDb();
+  await db.collection(COLLECTIONS.weights).doc(weight.weekStartDate).set(weight, { merge: false });
   return weight;
 }
 
 export async function getWeights() {
-  if (!hasGoogleCredentials()) {
+  if (!hasFirebaseCredentials()) {
     return [...getMemoryStore().weights.values()].sort((a, b) =>
       a.weekStartDate > b.weekStartDate ? 1 : -1,
     );
   }
 
-  await ensureSheetStructure();
-  const rows = dedupeRowsByKey(await readSheetValues(SHEETS.weeklyWeight.title));
-  return rows.map(rowToWeight).sort((a, b) => (a.weekStartDate > b.weekStartDate ? 1 : -1));
+  const db = getDb();
+  const snapshot = await db.collection(COLLECTIONS.weights).orderBy("weekStartDate").get();
+  const weights = snapshot.docs
+    .map((doc) => normalizeWeight(doc.data()))
+    .filter((entry): entry is WeightEntry => Boolean(entry));
+
+  return weights.length ? weights : seedWeights(DEFAULT_SETTINGS);
 }
 
 export async function unlockBadge(badgeId: string) {
-  if (!hasGoogleCredentials()) {
+  if (!hasFirebaseCredentials()) {
     getMemoryStore().badges.add(badgeId);
     return badgeId;
   }
 
-  await ensureSheetStructure();
-  const now = new Date();
-  await upsertSheetRow(SHEETS.badges.title, badgeId, [
-    badgeId,
-    now.toISOString().slice(0, 10),
-    now.toISOString(),
-  ]);
+  const db = getDb();
+  const now = new Date().toISOString();
+  await db.collection(COLLECTIONS.badges).doc(badgeId).set(
+    {
+      badgeId,
+      unlockedDate: now.slice(0, 10),
+      unlockedAt: now,
+    },
+    { merge: true },
+  );
   return badgeId;
 }
 
 export async function getUnlockedBadgeIds() {
-  if (!hasGoogleCredentials()) {
+  if (!hasFirebaseCredentials()) {
     return [...getMemoryStore().badges.values()];
   }
 
-  await ensureSheetStructure();
-  const rows = dedupeRowsByKey(await readSheetValues(SHEETS.badges.title));
-  return rows.map((row) => row[0]);
+  const db = getDb();
+  const snapshot = await db.collection(COLLECTIONS.badges).get();
+  return snapshot.docs.map((doc) => doc.id);
 }
