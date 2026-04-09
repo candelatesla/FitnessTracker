@@ -366,6 +366,6 @@ This project is functional as a full-stack personal tracker and is actively tune
 
 ## License
 
-Personal project. Add a license if you plan to open-source it publicly.
+Personal project. 
 
-Copyright (c) 2026 Yash Doshi. Built for personal use and portfolio presentation.
+Copyright (c) 2026 Yash Doshi. Built for personal use.
