@@ -35,19 +35,51 @@ export default function DashboardPage() {
   const [startDateDraft, setStartDateDraft] = useState(DEFAULT_SETTINGS.startDate);
 
   useEffect(() => {
-    void fetch("/api/get-all-logs", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((data) => setAllLogs(data));
-    void fetch("/api/settings", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((data) => {
-        if (!data?.startDate) {
-          setShowWelcome(true);
-          return;
-        }
-        setSettingsStartDate(data.startDate);
-        setStartDateDraft(data.startDate);
-      });
+    async function loadAllLogs() {
+      const response = await fetch("/api/get-all-logs", { cache: "no-store" });
+      const data = await response.json();
+      setAllLogs(data);
+    }
+
+    async function loadSettings() {
+      const response = await fetch("/api/settings", { cache: "no-store" });
+      const data = await response.json();
+
+      if (!data?.startDate) {
+        setShowWelcome(true);
+        return;
+      }
+
+      setSettingsStartDate(data.startDate);
+      setStartDateDraft(data.startDate);
+    }
+
+    function handleFocus() {
+      void loadAllLogs();
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void loadAllLogs();
+      }
+    }
+
+    void loadAllLogs();
+    void loadSettings();
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadAllLogs();
+      }
+    }, 5000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   const workoutDay = getWorkoutDayForDate(parseISO(selectedDate));

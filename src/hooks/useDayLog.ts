@@ -5,6 +5,8 @@ import { createDefaultDayLog, hydrateDayLog } from "@/lib/fitness";
 import type { DayLog } from "@/types";
 
 type SaveState = "idle" | "saving" | "saved";
+const AUTOSAVE_DEBOUNCE_MS = 800;
+const REFRESH_INTERVAL_MS = 2000;
 
 function stampDayLog(dayLog: DayLog): DayLog {
   return {
@@ -38,6 +40,21 @@ export function useDayLog(date: string) {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const skipAutosaveRef = useRef(true);
   const baselineRef = useRef<DayLog>(createDefaultDayLog(date));
+  const dayLogRef = useRef(dayLog);
+  const saveStateRef = useRef(saveState);
+  const isLoadingRef = useRef(isLoading);
+
+  useEffect(() => {
+    dayLogRef.current = dayLog;
+  }, [dayLog]);
+
+  useEffect(() => {
+    saveStateRef.current = saveState;
+  }, [saveState]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   useEffect(() => {
     async function load() {
@@ -46,6 +63,7 @@ export function useDayLog(date: string) {
       const data = (await response.json()) as DayLog | null;
       const hydrated = hydrateDayLog(data ?? createDefaultDayLog(date));
       setDayLog(hydrated);
+      dayLogRef.current = hydrated;
       baselineRef.current = hydrated;
       setSaveState("idle");
       setIsLoading(false);
@@ -57,11 +75,30 @@ export function useDayLog(date: string) {
 
   useEffect(() => {
     async function refresh() {
+      if (isLoadingRef.current || saveStateRef.current === "saving") {
+        return;
+      }
+
+      const current = dayLogRef.current;
+      const pendingChanges = getChangedKeys(current, baselineRef.current);
+
+      if (pendingChanges.length) {
+        return;
+      }
+
       const response = await fetch(`/api/get-day?date=${date}`, { cache: "no-store" });
       const data = (await response.json()) as DayLog | null;
       const hydrated = hydrateDayLog(data ?? createDefaultDayLog(date));
+
+      if (JSON.stringify(hydrated) === JSON.stringify(dayLogRef.current)) {
+        dayLogRef.current = hydrated;
+        baselineRef.current = hydrated;
+        return;
+      }
+
       baselineRef.current = hydrated;
       setDayLog(hydrated);
+      dayLogRef.current = hydrated;
       setSaveState("idle");
       skipAutosaveRef.current = true;
     }
@@ -82,7 +119,7 @@ export function useDayLog(date: string) {
       if (document.visibilityState === "visible") {
         void refresh();
       }
-    }, 2000);
+    }, REFRESH_INTERVAL_MS);
 
     return () => {
       window.removeEventListener("focus", handleFocus);
@@ -106,15 +143,20 @@ export function useDayLog(date: string) {
         setSaveState("idle");
         return;
       }
-      await fetch("/api/log-day", {
+      const response = await fetch("/api/log-day", {
         method: "POST",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dayLog: payload, changedKeys }),
       });
-      baselineRef.current = payload;
+      const saved = (await response.json()) as DayLog;
+      const hydratedSaved = hydrateDayLog(saved);
+      baselineRef.current = hydratedSaved;
+      setDayLog(hydratedSaved);
+      dayLogRef.current = hydratedSaved;
       setSaveState("saved");
-    }, 2000);
+      skipAutosaveRef.current = true;
+    }, AUTOSAVE_DEBOUNCE_MS);
 
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -148,7 +190,9 @@ export function useDayLog(date: string) {
         const hydratedSaved = hydrateDayLog(saved);
         baselineRef.current = hydratedSaved;
         setDayLog(hydratedSaved);
+        dayLogRef.current = hydratedSaved;
         setSaveState("saved");
+        skipAutosaveRef.current = true;
       },
     }),
     [dayLog],
