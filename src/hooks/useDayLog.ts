@@ -82,7 +82,7 @@ export function useDayLog(date: string) {
       if (document.visibilityState === "visible") {
         void refresh();
       }
-    }, 15000);
+    }, 2000);
 
     return () => {
       window.removeEventListener("focus", handleFocus);
