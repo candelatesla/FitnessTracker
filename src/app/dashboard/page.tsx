@@ -13,6 +13,7 @@ import { PageTransition } from "@/components/shared/PageTransition";
 import { useDayLog } from "@/hooks/useDayLog";
 import { useSelectedDate } from "@/hooks/use-selected-date";
 import { useWeekData } from "@/hooks/useWeekData";
+import { waterTarget } from "@/lib/data/dietPlan";
 import {
   DEFAULT_SETTINGS,
   countStreak,
@@ -88,6 +89,64 @@ export default function DashboardPage() {
   const gymStreak = countStreak(allLogs, (log) => log.workoutDone);
   const cleanStreak = countStreak(allLogs, isCleanSnackDay);
 
+  function toggleChecklistItem(id: string, checked: boolean) {
+    update((current) => {
+      switch (id) {
+        case "protein-shake":
+          return {
+            ...current,
+            meals: current.meals.map((meal) =>
+              meal.mealId === "protein-shake" ? { ...meal, eaten: checked } : meal,
+            ),
+          };
+        case "lunch-eaten":
+          return {
+            ...current,
+            meals: current.meals.map((meal) =>
+              meal.mealId === "lunch" ? { ...meal, eaten: checked } : meal,
+            ),
+          };
+        case "fruit-snack":
+          return {
+            ...current,
+            meals: current.meals.map((meal) =>
+              meal.mealId === "fruit-snack" ? { ...meal, eaten: checked } : meal,
+            ),
+          };
+        case "avoided-chips":
+          return {
+            ...current,
+            snacksAvoided: { ...current.snacksAvoided, chips: checked },
+          };
+        case "avoided-chocolate":
+          return {
+            ...current,
+            snacksAvoided: { ...current.snacksAvoided, "milk-chocolate": checked },
+          };
+        case "avoided-bread-butter":
+          return {
+            ...current,
+            snacksAvoided: { ...current.snacksAvoided, "bread-butter": checked },
+          };
+        case "workout-completed":
+          return {
+            ...current,
+            workoutDone: checked,
+          };
+        case "water-goal":
+          return {
+            ...current,
+            waterGlasses: checked ? waterTarget : 0,
+          };
+        default:
+          return {
+            ...current,
+            checklist: { ...current.checklist, [id]: checked },
+          };
+      }
+    });
+  }
+
   return (
     <AppShell
       title="Dashboard"
@@ -160,12 +219,7 @@ export default function DashboardPage() {
 
           <DailyChecklist
             checklist={hydrated.checklist}
-            onToggle={(id, checked) =>
-              update((current) => ({
-                ...current,
-                checklist: { ...current.checklist, [id]: checked },
-              }))
-            }
+            onToggle={toggleChecklistItem}
           />
         </div>
 
