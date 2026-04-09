@@ -11,7 +11,9 @@ export function useWeekData(startDate: string) {
   useEffect(() => {
     async function load() {
       setIsLoading(true);
-      const response = await fetch(`/api/get-week?startDate=${startDate}`);
+      const response = await fetch(`/api/get-week?startDate=${startDate}`, {
+        cache: "no-store",
+      });
       const data = (await response.json()) as DayLog[];
       setWeekLogs(data ?? []);
       setIsLoading(false);

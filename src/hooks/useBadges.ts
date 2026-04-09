@@ -18,9 +18,9 @@ export function useBadges() {
     async function load() {
       setIsLoading(true);
       const [logsRes, weightsRes, badgesRes] = await Promise.all([
-        fetch("/api/get-all-logs"),
-        fetch("/api/get-weights"),
-        fetch("/api/get-badges"),
+        fetch("/api/get-all-logs", { cache: "no-store" }),
+        fetch("/api/get-weights", { cache: "no-store" }),
+        fetch("/api/get-badges", { cache: "no-store" }),
       ]);
 
       const logsData = (await logsRes.json()) as DayLog[];
@@ -50,6 +50,7 @@ export function useBadges() {
       missing.map(async (badge) => {
         await fetch("/api/unlock-badge", {
           method: "POST",
+          cache: "no-store",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ badgeId: badge.id }),
         });

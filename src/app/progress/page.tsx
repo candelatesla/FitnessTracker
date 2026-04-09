@@ -16,7 +16,10 @@ export default function ProgressPage() {
   const [weightInput, setWeightInput] = useState("57.5");
 
   useEffect(() => {
-    void Promise.all([fetch("/api/get-all-logs"), fetch("/api/get-weights")]).then(
+    void Promise.all([
+      fetch("/api/get-all-logs", { cache: "no-store" }),
+      fetch("/api/get-weights", { cache: "no-store" }),
+    ]).then(
       async ([logsRes, weightsRes]) => {
         const logsData = (await logsRes.json()) as DayLog[];
         const weightsData = (await weightsRes.json()) as WeightEntry[];
@@ -61,6 +64,7 @@ export default function ProgressPage() {
                   };
                   await fetch("/api/log-weight", {
                     method: "POST",
+                    cache: "no-store",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(nextEntry),
                   });

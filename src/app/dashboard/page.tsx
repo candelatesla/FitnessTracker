@@ -35,10 +35,10 @@ export default function DashboardPage() {
   const [startDateDraft, setStartDateDraft] = useState(DEFAULT_SETTINGS.startDate);
 
   useEffect(() => {
-    void fetch("/api/get-all-logs")
+    void fetch("/api/get-all-logs", { cache: "no-store" })
       .then((response) => response.json())
       .then((data) => setAllLogs(data));
-    void fetch("/api/settings")
+    void fetch("/api/settings", { cache: "no-store" })
       .then((response) => response.json())
       .then((data) => {
         if (!data?.startDate) {
@@ -161,6 +161,7 @@ export default function DashboardPage() {
                 onClick={async () => {
                   await fetch("/api/settings", {
                     method: "POST",
+                    cache: "no-store",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ startDate: startDateDraft }),
                   });

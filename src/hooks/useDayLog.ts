@@ -16,7 +16,7 @@ export function useDayLog(date: string) {
   useEffect(() => {
     async function load() {
       setIsLoading(true);
-      const response = await fetch(`/api/get-day?date=${date}`);
+      const response = await fetch(`/api/get-day?date=${date}`, { cache: "no-store" });
       const data = (await response.json()) as DayLog | null;
       const hydrated = hydrateDayLog(data ?? createDefaultDayLog(date));
       setDayLog(hydrated);
@@ -40,6 +40,7 @@ export function useDayLog(date: string) {
       const payload = hydrateDayLog(dayLog);
       await fetch("/api/log-day", {
         method: "POST",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -64,6 +65,7 @@ export function useDayLog(date: string) {
         setSaveState("saving");
         await fetch("/api/log-day", {
           method: "POST",
+          cache: "no-store",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });

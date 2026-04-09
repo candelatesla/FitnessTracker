@@ -1,14 +1,16 @@
-import { NextResponse } from "next/server";
+import { dynamic, jsonNoStore, revalidate } from "@/lib/api-response";
 import { getSettings, saveSettings } from "@/lib/sheets/client";
 import type { AppSettings } from "@/types";
 
+export { dynamic, revalidate };
+
 export async function GET() {
   const settings = await getSettings();
-  return NextResponse.json(settings);
+  return jsonNoStore(settings);
 }
 
 export async function POST(request: Request) {
   const body = (await request.json()) as AppSettings;
   const saved = await saveSettings(body);
-  return NextResponse.json(saved);
+  return jsonNoStore(saved);
 }

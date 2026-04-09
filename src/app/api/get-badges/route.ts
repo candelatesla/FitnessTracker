@@ -1,7 +1,9 @@
-import { NextResponse } from "next/server";
 import { getUnlockedBadgeIds } from "@/lib/sheets/client";
+import { dynamic, jsonNoStore, revalidate } from "@/lib/api-response";
+
+export { dynamic, revalidate };
 
 export async function GET() {
   const badges = await getUnlockedBadgeIds();
-  return NextResponse.json(badges);
+  return jsonNoStore(badges);
 }
