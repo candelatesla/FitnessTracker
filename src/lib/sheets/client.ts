@@ -132,6 +132,26 @@ async function readSheetValues(sheetTitle: string) {
   return response.data.values ?? [];
 }
 
+function findLastRowIndex(rows: string[][], key: string) {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    if (rows[index]?.[0] === key) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function dedupeRowsByKey(rows: string[][]) {
+  const latestByKey = new Map<string, string[]>();
+
+  for (const row of rows) {
+    if (!row[0]) continue;
+    latestByKey.set(row[0], row);
+  }
+
+  return [...latestByKey.values()];
+}
+
 async function upsertSheetRow(
   sheetTitle: string,
   key: string,
@@ -140,7 +160,7 @@ async function upsertSheetRow(
   const sheets = await getSheetsClient();
   const spreadsheetId = process.env.GOOGLE_SHEET_ID!;
   const rows = await readSheetValues(sheetTitle);
-  const rowIndex = rows.findIndex((row) => row[0] === key);
+  const rowIndex = findLastRowIndex(rows, key);
 
   if (rowIndex >= 0) {
     await sheets.spreadsheets.values.update({
@@ -191,7 +211,8 @@ export async function getDayLog(date: string) {
 
   await ensureSheetStructure();
   const rows = await readSheetValues(SHEETS.dailyLog.title);
-  const row = rows.find((entry) => entry[0] === date);
+  const rowIndex = findLastRowIndex(rows, date);
+  const row = rowIndex >= 0 ? rows[rowIndex] : null;
   return row ? rowToDayLog(row) : null;
 }
 
@@ -213,10 +234,11 @@ export async function getWeekLogs(startDate: string) {
   }
 
   await ensureSheetStructure();
-  const rows = await readSheetValues(SHEETS.dailyLog.title);
+  const rows = dedupeRowsByKey(await readSheetValues(SHEETS.dailyLog.title));
   return rows
     .map(rowToDayLog)
     .filter((log) => log.date >= startDate)
+    .sort((a, b) => (a.date > b.date ? 1 : -1))
     .slice(0, 7);
 }
 
@@ -226,7 +248,7 @@ export async function getAllLogs() {
   }
 
   await ensureSheetStructure();
-  const rows = await readSheetValues(SHEETS.dailyLog.title);
+  const rows = dedupeRowsByKey(await readSheetValues(SHEETS.dailyLog.title));
   return rows.map(rowToDayLog).sort((a, b) => (a.date > b.date ? 1 : -1));
 }
 
@@ -249,7 +271,7 @@ export async function getWeights() {
   }
 
   await ensureSheetStructure();
-  const rows = await readSheetValues(SHEETS.weeklyWeight.title);
+  const rows = dedupeRowsByKey(await readSheetValues(SHEETS.weeklyWeight.title));
   return rows.map(rowToWeight).sort((a, b) => (a.weekStartDate > b.weekStartDate ? 1 : -1));
 }
 
@@ -275,6 +297,6 @@ export async function getUnlockedBadgeIds() {
   }
 
   await ensureSheetStructure();
-  const rows = await readSheetValues(SHEETS.badges.title);
+  const rows = dedupeRowsByKey(await readSheetValues(SHEETS.badges.title));
   return rows.map((row) => row[0]);
 }
