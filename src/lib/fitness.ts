@@ -91,6 +91,7 @@ export function createDefaultDayLog(date: string): DayLog {
     checklist: createDefaultChecklist(),
     notes: "",
     weightKg: null,
+    updatedAt: new Date(0).toISOString(),
   };
 }
 

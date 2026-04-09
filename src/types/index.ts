@@ -84,6 +84,7 @@ export interface DayLog {
   checklist: Record<string, boolean>;
   notes: string;
   weightKg: number | null;
+  updatedAt?: string;
 }
 
 export interface WeightEntry {

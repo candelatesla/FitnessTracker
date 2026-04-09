@@ -6,6 +6,13 @@ import type { DayLog } from "@/types";
 
 type SaveState = "idle" | "saving" | "saved";
 
+function stampDayLog(dayLog: DayLog): DayLog {
+  return {
+    ...dayLog,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export function useDayLog(date: string) {
   const [dayLog, setDayLog] = useState<DayLog>(createDefaultDayLog(date));
   const [isLoading, setIsLoading] = useState(true);
@@ -37,7 +44,7 @@ export function useDayLog(date: string) {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setSaveState("saving");
     timeoutRef.current = setTimeout(async () => {
-      const payload = hydrateDayLog(dayLog);
+      const payload = hydrateDayLog(stampDayLog(dayLog));
       await fetch("/api/log-day", {
         method: "POST",
         cache: "no-store",
@@ -61,7 +68,8 @@ export function useDayLog(date: string) {
         setDayLog((current) => hydrateDayLog(mutator(current)));
       },
       async saveNow() {
-        const payload = hydrateDayLog(dayLog);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        const payload = hydrateDayLog(stampDayLog(dayLog));
         setSaveState("saving");
         await fetch("/api/log-day", {
           method: "POST",

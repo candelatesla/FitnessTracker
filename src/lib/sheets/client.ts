@@ -152,6 +152,32 @@ function dedupeRowsByKey(rows: string[][]) {
   return [...latestByKey.values()];
 }
 
+function getDayLogTimestamp(row: string[]) {
+  try {
+    const notesBlob = row[9] ? JSON.parse(row[9]) : {};
+    const updatedAt = notesBlob.updatedAt;
+    return updatedAt ? Date.parse(updatedAt) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function dedupeDayLogRows(rows: string[][]) {
+  const latestByDate = new Map<string, string[]>();
+
+  for (const row of rows) {
+    const key = row[0];
+    if (!key) continue;
+
+    const existing = latestByDate.get(key);
+    if (!existing || getDayLogTimestamp(row) >= getDayLogTimestamp(existing)) {
+      latestByDate.set(key, row);
+    }
+  }
+
+  return [...latestByDate.values()];
+}
+
 async function upsertSheetRow(
   sheetTitle: string,
   key: string,
@@ -223,6 +249,14 @@ export async function upsertDayLog(dayLog: DayLog) {
   }
 
   await ensureSheetStructure();
+  const existing = await getDayLog(dayLog.date);
+  const incomingTs = Date.parse(dayLog.updatedAt ?? "") || 0;
+  const existingTs = Date.parse(existing?.updatedAt ?? "") || 0;
+
+  if (existing && incomingTs < existingTs) {
+    return existing;
+  }
+
   await upsertSheetRow(SHEETS.dailyLog.title, dayLog.date, dayLogToRow(dayLog));
   return dayLog;
 }
@@ -234,7 +268,7 @@ export async function getWeekLogs(startDate: string) {
   }
 
   await ensureSheetStructure();
-  const rows = dedupeRowsByKey(await readSheetValues(SHEETS.dailyLog.title));
+  const rows = dedupeDayLogRows(await readSheetValues(SHEETS.dailyLog.title));
   return rows
     .map(rowToDayLog)
     .filter((log) => log.date >= startDate)
@@ -248,7 +282,7 @@ export async function getAllLogs() {
   }
 
   await ensureSheetStructure();
-  const rows = dedupeRowsByKey(await readSheetValues(SHEETS.dailyLog.title));
+  const rows = dedupeDayLogRows(await readSheetValues(SHEETS.dailyLog.title));
   return rows.map(rowToDayLog).sort((a, b) => (a.date > b.date ? 1 : -1));
 }
 

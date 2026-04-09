@@ -15,6 +15,7 @@ export function dayLogToRow(dayLog: DayLog) {
     JSON.stringify({
       notes: dayLog.notes,
       checklist: dayLog.checklist,
+      updatedAt: dayLog.updatedAt ?? new Date().toISOString(),
     }),
     dayLog.weightKg == null ? "" : String(dayLog.weightKg),
   ];
@@ -38,6 +39,7 @@ export function rowToDayLog(row: string[]): DayLog {
     checklist: notesBlob.checklist ?? fallback.checklist,
     notes: notesBlob.notes ?? "",
     weightKg: row[10] ? Number(row[10]) : null,
+    updatedAt: notesBlob.updatedAt ?? fallback.updatedAt,
   });
 }
 
