@@ -206,6 +206,32 @@ async function upsertSheetRow(
   });
 }
 
+async function writeSheetRow(
+  sheetTitle: string,
+  rowIndex: number,
+  values: string[],
+) {
+  const sheets = await getSheetsClient();
+  const spreadsheetId = process.env.GOOGLE_SHEET_ID!;
+
+  if (rowIndex >= 0) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${sheetTitle}!A${rowIndex + 2}`,
+      valueInputOption: "RAW",
+      requestBody: { values: [values] },
+    });
+    return;
+  }
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${sheetTitle}!A1`,
+    valueInputOption: "RAW",
+    requestBody: { values: [values] },
+  });
+}
+
 export async function getSettings() {
   if (!hasGoogleCredentials()) {
     return getMemoryStore().settings;
@@ -249,7 +275,9 @@ export async function upsertDayLog(dayLog: DayLog) {
   }
 
   await ensureSheetStructure();
-  const existing = await getDayLog(dayLog.date);
+  const rows = await readSheetValues(SHEETS.dailyLog.title);
+  const rowIndex = findLastRowIndex(rows, dayLog.date);
+  const existing = rowIndex >= 0 ? rowToDayLog(rows[rowIndex]) : null;
   const incomingTs = Date.parse(dayLog.updatedAt ?? "") || 0;
   const existingTs = Date.parse(existing?.updatedAt ?? "") || 0;
 
@@ -257,7 +285,7 @@ export async function upsertDayLog(dayLog: DayLog) {
     return existing;
   }
 
-  await upsertSheetRow(SHEETS.dailyLog.title, dayLog.date, dayLogToRow(dayLog));
+  await writeSheetRow(SHEETS.dailyLog.title, rowIndex, dayLogToRow(dayLog));
   return dayLog;
 }
 

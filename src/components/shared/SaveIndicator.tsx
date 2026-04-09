@@ -2,7 +2,20 @@
 
 import { Loader2, CheckCircle2, Dot } from "lucide-react";
 
-export function SaveIndicator({ state }: { state: "idle" | "saving" | "saved" }) {
+export function SaveIndicator({
+  state,
+}: {
+  state: "idle" | "pending" | "saving" | "saved";
+}) {
+  if (state === "pending") {
+    return (
+      <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-muted">
+        <Dot className="h-4 w-4 text-accent" />
+        Changes pending
+      </div>
+    );
+  }
+
   if (state === "saving") {
     return (
       <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-muted">

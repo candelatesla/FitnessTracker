@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createDefaultDayLog, hydrateDayLog } from "@/lib/fitness";
 import type { DayLog } from "@/types";
 
-type SaveState = "idle" | "saving" | "saved";
+type SaveState = "idle" | "pending" | "saving" | "saved";
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const REFRESH_INTERVAL_MS = 2000;
 
@@ -135,7 +135,7 @@ export function useDayLog(date: string) {
     }
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setSaveState("saving");
+    setSaveState("pending");
     timeoutRef.current = setTimeout(async () => {
       const payload = hydrateDayLog(stampDayLog(dayLog));
       const changedKeys = getChangedKeys(payload, baselineRef.current);
@@ -143,6 +143,7 @@ export function useDayLog(date: string) {
         setSaveState("idle");
         return;
       }
+      setSaveState("saving");
       const response = await fetch("/api/log-day", {
         method: "POST",
         cache: "no-store",
