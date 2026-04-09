@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { parseISO } from "date-fns";
+import { CalendarDays, Clock3 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { QuoteCard } from "@/components/dashboard/QuoteCard";
 import { KpiRing } from "@/components/dashboard/KpiRing";
@@ -26,7 +27,7 @@ import {
 } from "@/lib/fitness";
 
 export default function DashboardPage() {
-  const { selectedDate } = useSelectedDate();
+  const { selectedDate, timeZone } = useSelectedDate();
   const { dayLog, saveState, update } = useDayLog(selectedDate);
   const { start } = getWeekRange(parseISO(selectedDate));
   const { weekLogs } = useWeekData(start.toISOString().slice(0, 10));
@@ -150,10 +151,34 @@ export default function DashboardPage() {
   return (
     <AppShell
       title="Dashboard"
-      subtitle={`${formatPrettyDate(parseISO(selectedDate))} · Week ${weekNumber} of your journey`}
+      subtitle={`${formatPrettyDate(parseISO(selectedDate))} · ${timeZone} · Week ${weekNumber} of your journey`}
       actions={<SaveIndicator state={saveState} />}
     >
       <PageTransition>
+        <div className="mb-6 grid gap-4 md:grid-cols-2">
+          <div className="panel-raised flex items-center gap-4 p-5">
+            <div className="rounded-2xl border border-accent/20 bg-accent/10 p-3 text-accent">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-muted">Today&apos;s Date</p>
+              <p className="font-display text-4xl uppercase tracking-[0.08em] text-foreground">
+                {formatPrettyDate(parseISO(selectedDate))}
+              </p>
+            </div>
+          </div>
+          <div className="panel-raised flex items-center gap-4 p-5">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-foreground">
+              <Clock3 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.16em] text-muted">Timezone</p>
+              <p className="text-lg font-semibold text-foreground">{timeZone}</p>
+              <p className="text-sm text-muted">The tracker now rolls over using your local timezone automatically.</p>
+            </div>
+          </div>
+        </div>
+
         <div className="grid gap-6 xl:grid-cols-[1.4fr,1fr]">
           <QuoteCard />
           <div className="grid gap-4 sm:grid-cols-2">

@@ -84,6 +84,8 @@ export interface DayLog {
   checklist: Record<string, boolean>;
   notes: string;
   weightKg: number | null;
+  timezone?: string;
+  createdAt?: string;
   updatedAt?: string;
 }
 

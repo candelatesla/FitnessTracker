@@ -25,6 +25,8 @@ export async function POST(request: Request) {
         }),
         {
           ...existing,
+          timezone: payload.timezone ?? existing.timezone,
+          createdAt: existing.createdAt ?? payload.createdAt,
           updatedAt: payload.updatedAt,
         },
       )

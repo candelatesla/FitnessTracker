@@ -15,7 +15,7 @@ import { weeklyWorkoutPlan } from "@/lib/data/gymPlan";
 import { createExerciseLog, formatPrettyDate, getWorkoutDayForDate } from "@/lib/fitness";
 
 export default function WorkoutPage() {
-  const { selectedDate, setSelectedDate } = useSelectedDate();
+  const { selectedDate, setSelectedDate, timeZone } = useSelectedDate();
   const { dayLog, update, saveNow, saveState } = useDayLog(selectedDate);
   const [showOverlay, setShowOverlay] = useState(false);
 
@@ -27,7 +27,7 @@ export default function WorkoutPage() {
   return (
     <AppShell
       title="Today's Workout"
-      subtitle={formatPrettyDate(parseISO(selectedDate))}
+      subtitle={`${formatPrettyDate(parseISO(selectedDate))} · ${timeZone}`}
       actions={<SaveIndicator state={saveState} />}
     >
       <PageTransition>

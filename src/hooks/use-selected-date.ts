@@ -1,33 +1,59 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getIsoDate } from "@/lib/fitness";
+import { getIsoDateInTimeZone } from "@/lib/fitness";
 
-const STORAGE_KEY = "fitness-tracker:selected-date";
+function getBrowserTimeZone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago";
+}
+
+function getTodayForTimeZone(timeZone: string) {
+  return getIsoDateInTimeZone(new Date(), timeZone);
+}
 
 export function useSelectedDate() {
-  const [selectedDate, setSelectedDate] = useState(() => getIsoDate(new Date()));
+  const [timeZone, setTimeZone] = useState(() => getBrowserTimeZone());
+  const [selectedDate, setSelectedDate] = useState(() => getTodayForTimeZone(getBrowserTimeZone()));
 
   useEffect(() => {
     const fromQuery = new URLSearchParams(window.location.search).get("date");
     if (fromQuery) {
       setSelectedDate(fromQuery);
-      window.localStorage.setItem(STORAGE_KEY, fromQuery);
       return;
     }
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      setSelectedDate(saved);
-    }
+
+    const nextTimeZone = getBrowserTimeZone();
+    setTimeZone(nextTimeZone);
+    setSelectedDate(getTodayForTimeZone(nextTimeZone));
+  }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const nextTimeZone = getBrowserTimeZone();
+      const nextToday = getTodayForTimeZone(nextTimeZone);
+      const currentQueryDate = new URLSearchParams(window.location.search).get("date");
+
+      setTimeZone(nextTimeZone);
+
+      if (!currentQueryDate) {
+        setSelectedDate(nextToday);
+      }
+    }, 60_000);
+
+    return () => window.clearInterval(intervalId);
   }, []);
 
   const updateSelectedDate = (date: string) => {
     setSelectedDate(date);
-    window.localStorage.setItem(STORAGE_KEY, date);
     const url = new URL(window.location.href);
-    url.searchParams.set("date", date);
+    const today = getTodayForTimeZone(getBrowserTimeZone());
+    if (date === today) {
+      url.searchParams.delete("date");
+    } else {
+      url.searchParams.set("date", date);
+    }
     window.history.replaceState({}, "", url);
   };
 
-  return { selectedDate, setSelectedDate: updateSelectedDate };
+  return { selectedDate, setSelectedDate: updateSelectedDate, timeZone };
 }

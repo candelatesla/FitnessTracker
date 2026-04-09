@@ -8,10 +8,21 @@ type SaveState = "idle" | "pending" | "saving" | "saved";
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const REFRESH_INTERVAL_MS = 2000;
 
+function getBrowserTimeZone() {
+  if (typeof window === "undefined") return "America/Chicago";
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago";
+}
+
 function stampDayLog(dayLog: DayLog): DayLog {
+  const now = new Date().toISOString();
   return {
     ...dayLog,
-    updatedAt: new Date().toISOString(),
+    timezone: dayLog.timezone ?? getBrowserTimeZone(),
+    createdAt:
+      dayLog.createdAt && dayLog.createdAt !== new Date(0).toISOString()
+        ? dayLog.createdAt
+        : now,
+    updatedAt: now,
   };
 }
 
@@ -62,6 +73,7 @@ export function useDayLog(date: string) {
       const response = await fetch(`/api/get-day?date=${date}`, { cache: "no-store" });
       const data = (await response.json()) as DayLog | null;
       const hydrated = hydrateDayLog(data ?? createDefaultDayLog(date));
+      hydrated.timezone = hydrated.timezone ?? getBrowserTimeZone();
       setDayLog(hydrated);
       dayLogRef.current = hydrated;
       baselineRef.current = hydrated;
@@ -89,6 +101,7 @@ export function useDayLog(date: string) {
       const response = await fetch(`/api/get-day?date=${date}`, { cache: "no-store" });
       const data = (await response.json()) as DayLog | null;
       const hydrated = hydrateDayLog(data ?? createDefaultDayLog(date));
+      hydrated.timezone = hydrated.timezone ?? getBrowserTimeZone();
 
       if (JSON.stringify(hydrated) === JSON.stringify(dayLogRef.current)) {
         dayLogRef.current = hydrated;

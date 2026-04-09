@@ -14,14 +14,14 @@ import { calorieTarget, proteinTarget, waterTarget } from "@/lib/data/dietPlan";
 import { formatPrettyDate, hydrateDayLog } from "@/lib/fitness";
 
 export default function DietPage() {
-  const { selectedDate, setSelectedDate } = useSelectedDate();
+  const { selectedDate, setSelectedDate, timeZone } = useSelectedDate();
   const { dayLog, update, saveNow, saveState } = useDayLog(selectedDate);
   const hydrated = hydrateDayLog(dayLog);
 
   return (
     <AppShell
       title="Diet Tracker"
-      subtitle={formatPrettyDate(parseISO(selectedDate))}
+      subtitle={`${formatPrettyDate(parseISO(selectedDate))} · ${timeZone}`}
       actions={
         <div className="flex items-center gap-3">
           <DatePicker value={selectedDate} onChange={setSelectedDate} />

@@ -75,6 +75,7 @@ export function createDefaultChecklist(): Record<string, boolean> {
 
 export function createDefaultDayLog(date: string): DayLog {
   const workoutDay = getWorkoutDayForDate(parseISO(date));
+  const defaultTimestamp = new Date(0).toISOString();
   return {
     date,
     workoutDayId: workoutDay.id,
@@ -91,7 +92,9 @@ export function createDefaultDayLog(date: string): DayLog {
     checklist: createDefaultChecklist(),
     notes: "",
     weightKg: null,
-    updatedAt: new Date(0).toISOString(),
+    timezone: "America/Chicago",
+    createdAt: defaultTimestamp,
+    updatedAt: defaultTimestamp,
   };
 }
 
@@ -169,6 +172,21 @@ export function getWeekDays(date: Date) {
 
 export function getIsoDate(date: Date) {
   return format(date, "yyyy-MM-dd");
+}
+
+export function getIsoDateInTimeZone(date: Date, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  const parts = formatter.formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value ?? "1970";
+  const month = parts.find((part) => part.type === "month")?.value ?? "01";
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+  return `${year}-${month}-${day}`;
 }
 
 export function getYoutubeEmbedUrl(url?: string) {
