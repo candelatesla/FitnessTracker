@@ -13,12 +13,31 @@ function stampDayLog(dayLog: DayLog): DayLog {
   };
 }
 
+const TRACKED_KEYS: Array<keyof DayLog> = [
+  "workoutDayId",
+  "workoutDone",
+  "exercisesCompleted",
+  "waterGlasses",
+  "meals",
+  "snacksAvoided",
+  "checklist",
+  "notes",
+  "weightKg",
+];
+
+function getChangedKeys(current: DayLog, baseline: DayLog) {
+  return TRACKED_KEYS.filter(
+    (key) => JSON.stringify(current[key]) !== JSON.stringify(baseline[key]),
+  );
+}
+
 export function useDayLog(date: string) {
   const [dayLog, setDayLog] = useState<DayLog>(createDefaultDayLog(date));
   const [isLoading, setIsLoading] = useState(true);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const skipAutosaveRef = useRef(true);
+  const baselineRef = useRef<DayLog>(createDefaultDayLog(date));
 
   useEffect(() => {
     async function load() {
@@ -27,12 +46,49 @@ export function useDayLog(date: string) {
       const data = (await response.json()) as DayLog | null;
       const hydrated = hydrateDayLog(data ?? createDefaultDayLog(date));
       setDayLog(hydrated);
+      baselineRef.current = hydrated;
       setSaveState("idle");
       setIsLoading(false);
       skipAutosaveRef.current = true;
     }
 
     void load();
+  }, [date]);
+
+  useEffect(() => {
+    async function refresh() {
+      const response = await fetch(`/api/get-day?date=${date}`, { cache: "no-store" });
+      const data = (await response.json()) as DayLog | null;
+      const hydrated = hydrateDayLog(data ?? createDefaultDayLog(date));
+      baselineRef.current = hydrated;
+      setDayLog(hydrated);
+      setSaveState("idle");
+      skipAutosaveRef.current = true;
+    }
+
+    function handleFocus() {
+      void refresh();
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
+    }
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
+    }, 15000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(intervalId);
+    };
   }, [date]);
 
   useEffect(() => {
@@ -45,12 +101,18 @@ export function useDayLog(date: string) {
     setSaveState("saving");
     timeoutRef.current = setTimeout(async () => {
       const payload = hydrateDayLog(stampDayLog(dayLog));
+      const changedKeys = getChangedKeys(payload, baselineRef.current);
+      if (!changedKeys.length) {
+        setSaveState("idle");
+        return;
+      }
       await fetch("/api/log-day", {
         method: "POST",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ dayLog: payload, changedKeys }),
       });
+      baselineRef.current = payload;
       setSaveState("saved");
     }, 2000);
 
@@ -70,13 +132,22 @@ export function useDayLog(date: string) {
       async saveNow() {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         const payload = hydrateDayLog(stampDayLog(dayLog));
+        const changedKeys = getChangedKeys(payload, baselineRef.current);
+        if (!changedKeys.length) {
+          setSaveState("saved");
+          return;
+        }
         setSaveState("saving");
-        await fetch("/api/log-day", {
+        const response = await fetch("/api/log-day", {
           method: "POST",
           cache: "no-store",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ dayLog: payload, changedKeys }),
         });
+        const saved = (await response.json()) as DayLog;
+        const hydratedSaved = hydrateDayLog(saved);
+        baselineRef.current = hydratedSaved;
+        setDayLog(hydratedSaved);
         setSaveState("saved");
       },
     }),
