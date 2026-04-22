@@ -364,8 +364,7 @@ This project is functional as a full-stack personal tracker and is actively tune
 - Email: yash.doshi@tamu.edu
 - LinkedIn: [https://www.linkedin.com/in/yashdoshi8/](https://www.linkedin.com/in/yashdoshi8/)
 
-## License
+## License / Copyright
+© 2026 Yash Chetan Doshi. All rights reserved.
 
-Personal project. 
-
-Copyright (c) 2026 Yash Doshi. Built for personal use.
+You may not copy, modify, distribute, or use any part of this repository or its contents without prior written permission from the author.
